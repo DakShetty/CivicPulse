@@ -1,0 +1,14 @@
+{
+  "BudgetName": "CivicPulse-Monthly-Limit",
+  "BudgetLimit": {
+    "Amount": "5.0",
+    "Unit": "USD"
+  },
+  "CostTypes": {
+    "IncludeTax": true,
+    "IncludeSubscription": true,
+    "UseBlended": false
+  },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST"
+}

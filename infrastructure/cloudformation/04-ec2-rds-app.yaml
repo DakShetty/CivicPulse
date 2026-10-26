@@ -21,7 +21,7 @@ Parameters:
   RDSSecurityGroupId:
     Type: String
 
-  EC2InstanceProfileArn:
+  EC2InstanceProfileName:
     Type: String
 
   AlertsTopicArn:
@@ -46,6 +46,11 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Master password for MySQL (must be at least 8 chars)
+
+  AmiId:
+    Type: String
+    Default: ami-082a1ff88c78c6290 # Ubuntu 22.04 LTS in ap-south-1
+    Description: AMI ID for Ubuntu 22.04 LTS in target region
 
 Resources:
   PrivateMySQLDatabase:
@@ -85,8 +90,8 @@ Resources:
       SubnetId: !Ref PublicSubnetId
       SecurityGroupIds:
         - !Ref EC2SecurityGroupId
-      IamInstanceProfile: !Select [1, !Split ['/', !Ref EC2InstanceProfileArn]]
-      ImageId: ami-0c7217cdde317cfec # Ubuntu 22.04 LTS (us-east-1). Adjust per target region.
+      IamInstanceProfile: !Ref EC2InstanceProfileName
+      ImageId: !Ref AmiId
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:

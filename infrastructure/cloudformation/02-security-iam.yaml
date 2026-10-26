@@ -131,3 +131,7 @@ Outputs:
     Value: !GetAtt EC2InstanceProfile.Arn
     Export:
       Name: !Sub '${EnvironmentName}-EC2InstanceProfileArn'
+  EC2InstanceProfileName:
+    Value: !Ref EC2InstanceProfile
+    Export:
+      Name: !Sub '${EnvironmentName}-EC2InstanceProfileName'
