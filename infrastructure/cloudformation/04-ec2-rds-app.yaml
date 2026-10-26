@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CivicPulse Infrastructure - Step 4: EC2 Application Host, Private RDS MySQL, CloudWatch Logs & CPU Alarm'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: civicpulse-demo
+
+  VpcId:
+    Type: String
+
+  PublicSubnetId:
+    Type: String
+
+  DBSubnetGroupName:
+    Type: String
+
+  EC2SecurityGroupId:
+    Type: String
+
+  RDSSecurityGroupId:
+    Type: String
+
+  EC2InstanceProfileArn:
+    Type: String
+
+  AlertsTopicArn:
+    Type: String
+
+  EC2InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t4g.micro, t3.small]
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    AllowedValues: [db.t4g.micro, db.t3.micro]
+
+  DBUsername:
+    Type: String
+    Default: civicadmin
+    NoEcho: true
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Master password for MySQL (must be at least 8 chars)
+
+Resources:
+  PrivateMySQLDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-mysql'
+      Engine: mysql
+      EngineVersion: '8.0'
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: '20'
+      StorageType: gp3
+      MultiAZ: false # Cost-controlled: single-AZ deployment for educational tier
+      PubliclyAccessible: false # Enforces strict private network isolation
+      DBName: civicpulse
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroupName
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroupId
+      BackupRetentionPeriod: 1 # Cost-conscious 1-day retention
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-rds-mysql'
+
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/civicpulse/${EnvironmentName}'
+      RetentionInDays: 14
+
+  EC2AppHost:
+    Type: AWS::EC2::Instance
+    DependsOn: PrivateMySQLDatabase
+    Properties:
+      InstanceType: !Ref EC2InstanceType
+      SubnetId: !Ref PublicSubnetId
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroupId
+      IamInstanceProfile: !Select [1, !Split ['/', !Ref EC2InstanceProfileArn]]
+      ImageId: ami-0c7217cdde317cfec # Ubuntu 22.04 LTS (us-east-1). Adjust per target region.
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          echo "CivicPulse EC2 host provisioning started..."
+          apt-get update -y
+          apt-get install -y python3-pip python3-venv git nginx
+
+          # Application deployment directory
+          mkdir -p /opt/civicpulse
+          echo "System provisioned. Ready for deployment pull."
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ec2-host'
+
+  EC2HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-ec2-high-cpu'
+      AlarmDescription: 'Alarm triggered when CivicPulse EC2 CPU utilization exceeds 80% for 10 minutes'
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2AppHost
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertsTopicArn
+
+Outputs:
+  RDSEndpoint:
+    Value: !GetAtt PrivateMySQLDatabase.Endpoint.Address
+    Description: Private endpoint of MySQL database
+  EC2PublicIP:
+    Value: !GetAtt EC2AppHost.PublicIp
+    Description: Public IPv4 address of application host

@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CivicPulse Infrastructure - Step 3: Private S3 Storage, SQS Asynchronous Queue with DLQ, and SNS Topic'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: civicpulse-demo
+    Description: Prefix tag for all resources
+
+Resources:
+  PrivateStorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-storage-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 2
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-bucket'
+
+  JobsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvironmentName}-jobs-dlq'
+      MessageRetentionPeriod: 1209600 # 14 days
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-jobs-dlq'
+
+  JobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvironmentName}-jobs-queue'
+      VisibilityTimeout: 180 # 3 minutes
+      MessageRetentionPeriod: 345600 # 4 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt JobsDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-jobs-queue'
+
+  CivicAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${EnvironmentName}-alerts-topic'
+      DisplayName: CivicPulse Operations & Operational Alerts
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-alerts-topic'
+
+Outputs:
+  BucketName:
+    Value: !Ref PrivateStorageBucket
+    Export:
+      Name: !Sub '${EnvironmentName}-BucketName'
+  JobsQueueUrl:
+    Value: !Ref JobsQueue
+    Export:
+      Name: !Sub '${EnvironmentName}-JobsQueueUrl'
+  JobsQueueArn:
+    Value: !GetAtt JobsQueue.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-JobsQueueArn'
+  JobsDLQUrl:
+    Value: !Ref JobsDeadLetterQueue
+    Export:
+      Name: !Sub '${EnvironmentName}-JobsDLQUrl'
+  AlertsTopicArn:
+    Value: !Ref CivicAlertsTopic
+    Export:
+      Name: !Sub '${EnvironmentName}-AlertsTopicArn'
