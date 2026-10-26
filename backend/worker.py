@@ -1,7 +1,14 @@
+import sys
 import time
 import json
 import logging
+from pathlib import Path
 from datetime import datetime, timezone
+
+project_root = str(Path(__file__).resolve().parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from backend.config import Config
 from backend.models import init_db, SessionLocal
 from backend.models.processing_job import ProcessingJob
