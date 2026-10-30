@@ -45,10 +45,10 @@ export const AnalyticsPage: React.FC = () => {
       <div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
           <BarChart3 className="w-6 h-6 text-teal-600" />
-          Hotspots & Service-Level Agreement (SLA) Analytics
+          Service-Level Agreement (SLA) & Performance Analytics
         </h1>
         <p className="text-xs text-slate-600 mt-0.5">
-          Municipal zone concentration, average response times, and recurring infrastructure bottlenecks.
+          Resolution efficiency, category distribution, average response times, and municipal SLA compliance metrics.
         </p>
       </div>
 
@@ -107,65 +107,16 @@ export const AnalyticsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Hotspots Breakdown Table & Category Distribution */}
+      {/* Category Breakdown & Status Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Geographic Hotspots by Area (7 cols) */}
+        {/* Category Breakdown */}
         <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-teal-600" />
-              <h2 className="text-sm font-bold text-slate-900">Geographic Hotspot Rankings</h2>
-            </div>
-            <span className="text-[11px] text-slate-400 font-mono">Aggregated by Municipal Ward</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="p-3">Ward / District Area</th>
-                  <th className="p-3">Total Issues</th>
-                  <th className="p-3">Top Category</th>
-                  <th className="p-3">Avg Priority</th>
-                  <th className="p-3">Safety Hazards</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {hotspots.map((h, idx) => (
-                  <tr key={h.area} className="hover:bg-slate-50">
-                    <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold">
-                        {idx + 1}
-                      </span>
-                      {h.area}
-                    </td>
-                    <td className="p-3 font-semibold text-slate-800">{h.issue_count} reports</td>
-                    <td className="p-3 text-teal-700 font-medium">{h.top_category}</td>
-                    <td className="p-3 font-bold text-slate-800">{h.avg_priority}</td>
-                    <td className="p-3">
-                      {h.safety_hazards > 0 ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded">
-                          <Flame className="w-3 h-3" /> {h.safety_hazards}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">0</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Category Breakdown (5 cols) */}
-        <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
               <PieChart className="w-5 h-5 text-teal-600" />
-              <h2 className="text-sm font-bold text-slate-900">Issues by Category</h2>
+              <h2 className="text-sm font-bold text-slate-900">Issues by Infrastructure Category</h2>
             </div>
-            <span className="text-[11px] text-slate-400 font-mono">Total Volume</span>
+            <span className="text-[11px] text-slate-400 font-mono">Volume Distribution</span>
           </div>
 
           <div className="space-y-3 pt-2">
@@ -180,9 +131,49 @@ export const AnalyticsPage: React.FC = () => {
                       {item.count} ({pct}%)
                     </span>
                   </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-slate-100 rounded-full h-2">
                     <div
-                      className="bg-teal-500 h-2 rounded-full transition-all duration-500"
+                      className="bg-teal-500 h-2 rounded-full"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* SLA Compliance Status Distribution */}
+        <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-teal-600" />
+              <h2 className="text-sm font-bold text-slate-900">SLA Lifecycle Breakdown</h2>
+            </div>
+            <span className="text-[11px] text-slate-400 font-mono">Current Status</span>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            {Object.entries(summary?.status_breakdown || {}).map(([st, cnt]) => {
+              const total = summary?.total_issues || 1;
+              const pct = Math.round((cnt / total) * 100);
+              return (
+                <div key={st} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-semibold text-slate-800">{st}</span>
+                    <span className="text-slate-500 font-mono">
+                      {cnt} ({pct}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        st === 'Resolved' || st === 'Verified'
+                          ? 'bg-emerald-500'
+                          : st === 'In Progress' || st === 'Assigned'
+                          ? 'bg-sky-500'
+                          : 'bg-amber-500'
+                      }`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>

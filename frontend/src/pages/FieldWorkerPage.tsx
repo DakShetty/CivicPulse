@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Issue } from '../types';
 import { api } from '../api/client';
 import {
@@ -21,6 +21,12 @@ export const FieldWorkerPage: React.FC<FieldWorkerPageProps> = ({ issues, onRefr
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (issues.length === 0) {
+      onRefresh();
+    }
+  }, []);
 
   // Filter issues assigned or relevant for field operations
   const assignedIssues = issues.filter(

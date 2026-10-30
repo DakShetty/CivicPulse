@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Issue, IssueCategory, UserRole } from './types';
 import { api } from './api/client';
 import { Navbar } from './components/Navbar';
+import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportIssuePage } from './pages/ReportIssuePage';
 import { ClustersPage } from './pages/ClustersPage';
@@ -9,28 +10,18 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 import { FieldWorkerPage } from './pages/FieldWorkerPage';
 import { TrackIssuePage } from './pages/TrackIssuePage';
 import { ReportsPage } from './pages/ReportsPage';
+import { WorkerApprovalsPage } from './pages/WorkerApprovalsPage';
 
 export function App() {
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [currentTab, setCurrentTab] = useState('login');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [categories, setCategories] = useState<IssueCategory[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTrackRef, setSearchTrackRef] = useState('');
 
-  // Initial load: authenticate default demo user and fetch data
-  const loadInitialData = async () => {
+  const loadData = async () => {
     try {
-      // Auto-login as admin by default for seamless classroom evaluation
-      if (!localStorage.getItem('civicpulse_token')) {
-        const loginRes = await api.login('admin@civicpulse.local', 'AdminPass123!');
-        localStorage.setItem('civicpulse_token', loginRes.token);
-        setCurrentUser(loginRes.user);
-      } else {
-        const meRes = await api.getMe();
-        setCurrentUser(meRes.user);
-      }
-
       const [cats, issuesRes] = await Promise.all([
         api.getCategories(),
         api.getIssues({ limit: 100 }),
@@ -38,21 +29,71 @@ export function App() {
       setCategories(cats);
       setIssues(issuesRes.issues);
     } catch (err) {
-      console.error('Initial load error:', err);
-    } finally {
-      setLoading(false);
+      console.error('Failed to load issues or categories:', err);
     }
   };
 
+  // Initial load: check for active token session
+  const checkSession = async () => {
+    const token = localStorage.getItem('civicpulse_token');
+    if (token) {
+      try {
+        const meRes = await api.getMe();
+        setCurrentUser(meRes.user);
+        // Direct to role dashboard
+        if (meRes.user.role === 'field_worker') setCurrentTab('field');
+        else if (meRes.user.role === 'reporter') setCurrentTab('report');
+        else setCurrentTab('dashboard');
+
+        await loadData();
+      } catch (err) {
+        console.warn('Session expired or invalid token:', err);
+        localStorage.removeItem('civicpulse_token');
+        setCurrentUser(null);
+        setCurrentTab('login');
+      }
+    } else {
+      setCurrentUser(null);
+      setCurrentTab('login');
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    loadInitialData();
+    checkSession();
+    loadData();
   }, []);
+
+  useEffect(() => {
+    if (currentTab !== 'login' && issues.length === 0) {
+      loadData();
+    }
+  }, [currentTab]);
+
+  const handleLoginSuccess = async (user: User, token: string) => {
+    setCurrentUser(user);
+    // Role-based redirect to respective protected dashboard
+    if (user.role === 'field_worker') {
+      setCurrentTab('field');
+    } else if (user.role === 'reporter') {
+      setCurrentTab('report');
+    } else {
+      setCurrentTab('dashboard');
+    }
+    await loadData();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('civicpulse_token');
+    setCurrentUser(null);
+    setCurrentTab('login');
+  };
 
   // Fast role switcher for classroom viva demo
   const handleQuickRoleSwitch = async (role: UserRole) => {
     try {
-      let email = 'admin@civicpulse.local';
-      let pass = 'AdminPass123!';
+      let email = 'admin@civicpulse.org';
+      let pass = 'Admin@123';
       if (role === 'field_worker') {
         email = 'fieldworker@civicpulse.local';
         pass = 'WorkerPass123!';
@@ -65,10 +106,12 @@ export function App() {
       localStorage.setItem('civicpulse_token', res.token);
       setCurrentUser(res.user);
 
-      // Auto route to corresponding view
+      // Auto route to corresponding role view
       if (role === 'field_worker') setCurrentTab('field');
       else if (role === 'reporter') setCurrentTab('report');
       else setCurrentTab('dashboard');
+
+      await loadData();
     } catch (err: any) {
       alert(`Role switch error: ${err.message}`);
     }
@@ -77,7 +120,9 @@ export function App() {
   const handleRefreshIssues = async () => {
     try {
       const res = await api.getIssues({ limit: 100 });
-      setIssues(res.issues);
+      if (res && res.issues) {
+        setIssues(res.issues);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -95,6 +140,7 @@ export function App() {
         setCurrentTab={setCurrentTab}
         currentUser={currentUser}
         onQuickRoleSwitch={handleQuickRoleSwitch}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1">
@@ -102,6 +148,8 @@ export function App() {
           <div className="py-24 text-center text-xs text-slate-500 font-medium">
             Connecting to CivicPulse backend services...
           </div>
+        ) : !currentUser ? (
+          <LoginPage onLoginSuccess={handleLoginSuccess} />
         ) : (
           <>
             {currentTab === 'report' && (
@@ -121,19 +169,40 @@ export function App() {
               />
             )}
 
-            {currentTab === 'clusters' && <ClustersPage />}
+            {currentTab === 'clusters' && currentUser.role === 'admin' && <ClustersPage />}
 
-            {currentTab === 'analytics' && <AnalyticsPage />}
+            {currentTab === 'analytics' && currentUser.role === 'admin' && <AnalyticsPage />}
 
             {currentTab === 'field' && (
               <FieldWorkerPage issues={issues} onRefresh={handleRefreshIssues} />
             )}
 
+            {currentTab === 'approvals' && currentUser.role === 'admin' && <WorkerApprovalsPage />}
+
             {currentTab === 'track' && (
               <TrackIssuePage initialReference={searchTrackRef} />
             )}
 
-            {currentTab === 'reports' && <ReportsPage />}
+            {currentTab === 'reports' && currentUser.role === 'admin' && <ReportsPage />}
+
+            {/* If tab is not accessible by current role, fallback to default dashboard */}
+            {['clusters', 'analytics', 'approvals', 'reports'].includes(currentTab) &&
+              currentUser.role !== 'admin' && (
+                <div className="max-w-md mx-auto my-16 p-6 bg-white rounded-2xl border border-slate-200 text-center space-y-3">
+                  <div className="text-sm font-bold text-slate-900">Access Restricted</div>
+                  <p className="text-xs text-slate-500">
+                    This section requires Administrator privileges.
+                  </p>
+                  <button
+                    onClick={() =>
+                      setCurrentTab(currentUser.role === 'field_worker' ? 'field' : 'report')
+                    }
+                    className="px-4 py-2 rounded-lg bg-teal-600 text-white text-xs font-semibold"
+                  >
+                    Return to My Dashboard
+                  </button>
+                </div>
+              )}
           </>
         )}
       </main>

@@ -28,16 +28,159 @@ export const ReportIssuePage: React.FC<ReportIssuePageProps> = ({
   const [categoryId, setCategoryId] = useState<number | string>(categories[0]?.id || 1);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [ward, setWard] = useState('Downtown Central');
-  const [address, setAddress] = useState('Market Street near 5th intersection');
+  const [ward, setWard] = useState('Central Zone - Ward 111 (Shantala Nagar)');
+  const [address, setAddress] = useState('MG Road near Brigade Road Signal, Bengaluru');
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number }>({
-    lat: 37.7749,
-    lng: -122.4194,
+    lat: 12.9752,
+    lng: 77.6095,
   });
+  const [isLocating, setIsLocating] = useState(false);
   const [severity, setSeverity] = useState(3);
   const [safetyHazard, setSafetyHazard] = useState(false);
   const [impactsCritical, setImpactsCritical] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+
+  // Regional Indian offline fallback heuristics
+  const getOfflineLocation = (lat: number, lng: number) => {
+    // Mumbai Region (lat: 18.8 - 19.35, lng: 72.7 - 73.15)
+    if (lat >= 18.8 && lat <= 19.35 && lng >= 72.7 && lng <= 73.15) {
+      if (lat >= 19.1) {
+        return {
+          ward: 'BMC Zone IV - Andheri West / Goregaon',
+          address: 'Near Link Road & SV Road, Mumbai, Maharashtra',
+        };
+      } else if (lat >= 19.0) {
+        return {
+          ward: 'BMC Zone III - Bandra West / Khar',
+          address: 'Near Hill Road / Bandra Bandstand, Mumbai, Maharashtra',
+        };
+      } else {
+        return {
+          ward: 'BMC Zone I - South Mumbai (Colaba / Marine Drive)',
+          address: 'Near Marine Drive Promenade, Mumbai, Maharashtra',
+        };
+      }
+    }
+    // Delhi NCR Region (lat: 28.4 - 28.9, lng: 76.9 - 77.45)
+    if (lat >= 28.4 && lat <= 28.9 && lng >= 76.9 && lng <= 77.45) {
+      if (lat >= 28.6) {
+        return {
+          ward: 'MCD Central Zone - Connaught Place / Karol Bagh',
+          address: 'Near Barakhamba Road, New Delhi, Delhi',
+        };
+      } else {
+        return {
+          ward: 'MCD South Zone - Hauz Khas / Saket',
+          address: 'Near Outer Ring Road, South Delhi, Delhi',
+        };
+      }
+    }
+    // Bengaluru Region (lat: 12.8 - 13.15, lng: 77.45 - 77.8)
+    if (lat >= 12.8 && lat <= 13.15 && lng >= 77.45 && lng <= 77.8) {
+      if (lng >= 77.63) {
+        return {
+          ward: 'BBMP East Zone - Indiranagar (Ward 80)',
+          address: '100 Feet Road, Near 12th Main, Indiranagar, Bengaluru',
+        };
+      } else if (lat <= 12.94) {
+        return {
+          ward: 'BBMP South Zone - Koramangala (Ward 151)',
+          address: 'Near Sony World Signal, Koramangala 4th Block, Bengaluru',
+        };
+      } else {
+        return {
+          ward: 'BBMP Central Zone - Ward 111 (Shantala Nagar)',
+          address: 'MG Road near Brigade Road Signal, Bengaluru',
+        };
+      }
+    }
+    // Pune Region (lat: 18.4 - 18.7, lng: 73.7 - 74.0)
+    if (lat >= 18.4 && lat <= 18.7 && lng >= 73.7 && lng <= 74.0) {
+      return {
+        ward: 'PMC Zone 2 - Shivajinagar / Kothrud',
+        address: 'FC Road / Karve Road, Pune, Maharashtra',
+      };
+    }
+    // Chennai Region (lat: 12.9 - 13.2, lng: 80.1 - 80.35)
+    if (lat >= 12.9 && lat <= 13.2 && lng >= 80.1 && lng <= 80.35) {
+      return {
+        ward: 'Greater Chennai Corp - Zone 10 (T. Nagar)',
+        address: 'Near Usman Road / Panagal Park, Chennai, Tamil Nadu',
+      };
+    }
+    // Hyderabad Region (lat: 17.3 - 17.6, lng: 78.3 - 78.6)
+    if (lat >= 17.3 && lat <= 17.6 && lng >= 78.3 && lng <= 78.6) {
+      return {
+        ward: 'GHMC West Zone - Hitec City / Madhapur (Ward 107)',
+        address: 'Near Cyber Towers, Hitec City, Hyderabad, Telangana',
+      };
+    }
+    // Kolkata Region (lat: 22.4 - 22.7, lng: 88.2 - 88.5)
+    if (lat >= 22.4 && lat <= 22.7 && lng >= 88.2 && lng <= 88.5) {
+      return {
+        ward: 'KMC Borough VII - Park Street',
+        address: 'Park Street / Camac Street, Kolkata, West Bengal',
+      };
+    }
+
+    return {
+      ward: `Municipal Ward [${lat.toFixed(3)}N, ${lng.toFixed(3)}E]`,
+      address: `Near Landmark Coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)}), India`,
+    };
+  };
+
+  // Dynamic reverse-geocoding handler triggered when user clicks or drags map pin
+  const handleMapCoordinatesChange = async (newCoords: { lat: number; lng: number }) => {
+    setCoordinates(newCoords);
+    setIsLocating(true);
+
+    // 1. Instant offline heuristic update so UI changes in 0ms
+    const fallback = getOfflineLocation(newCoords.lat, newCoords.lng);
+    setWard(fallback.ward);
+    setAddress(fallback.address);
+
+    // 2. Query Nominatim reverse geocoder for pinpoint exact street / district
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${newCoords.lat}&lon=${newCoords.lng}`,
+        {
+          signal: controller.signal,
+          headers: { 'Accept-Language': 'en' },
+        }
+      );
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.address) {
+          const a = data.address;
+          const road = a.road || a.pedestrian || a.suburb || a.neighbourhood || '';
+          const neighborhood = a.suburb || a.neighbourhood || a.city_district || a.quarter || '';
+          const city = a.city || a.town || a.village || a.state_district || '';
+          const state = a.state || 'India';
+
+          const resolvedWard = neighborhood
+            ? `${neighborhood} (${city || 'Ward'})`
+            : city
+            ? `${city} Municipal Zone`
+            : fallback.ward;
+
+          const addressParts = [road, neighborhood, city, state].filter(
+            (part, index, self) => Boolean(part) && self.indexOf(part) === index
+          );
+          const resolvedAddress = addressParts.length > 0 ? addressParts.join(', ') : fallback.address;
+
+          setWard(resolvedWard);
+          setAddress(resolvedAddress);
+        }
+      }
+    } catch {
+      // Retain the immediate offline heuristic
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,18 +370,57 @@ export const ReportIssuePage: React.FC<ReportIssuePageProps> = ({
                   Click on the map or drag the pin to set the issue coordinates
                 </span>
               </div>
-              <span className="font-mono text-xs text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-200">
-                {coordinates.lat.toFixed(4)}, {coordinates.lng.toFixed(4)}
-              </span>
+              <div className="flex items-center gap-2">
+                {isLocating && (
+                  <span className="text-[11px] font-semibold text-teal-700 animate-pulse flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-teal-600 animate-ping inline-block"></span>
+                    Resolving location...
+                  </span>
+                )}
+                <div className="flex items-center gap-1.5 text-xs font-mono bg-teal-50 px-2 py-1 rounded border border-teal-200">
+                  <span className="text-teal-900 font-bold">Lat:</span>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={coordinates.lat}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || coordinates.lat;
+                      handleMapCoordinatesChange({ ...coordinates, lat: val });
+                    }}
+                    className="w-20 bg-white border border-teal-300 rounded px-1.5 py-0.5 text-xs text-slate-800 focus:outline-none"
+                  />
+                  <span className="text-teal-900 font-bold ml-1">Lng:</span>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={coordinates.lng}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || coordinates.lng;
+                      handleMapCoordinatesChange({ ...coordinates, lng: val });
+                    }}
+                    className="w-20 bg-white border border-teal-300 rounded px-1.5 py-0.5 text-xs text-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
 
             <CivicMap
               issues={[]}
               pickerMode={true}
               selectedCoordinates={coordinates}
-              onCoordinatesChange={setCoordinates}
+              onCoordinatesChange={handleMapCoordinatesChange}
               height="260px"
             />
+
+            <div className="flex items-center justify-between text-[11px] text-teal-700 bg-teal-50/70 border border-teal-200/80 px-3 py-1.5 rounded-lg">
+              <span className="flex items-center gap-1.5 font-medium">
+                <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                Location & Ward auto-update dynamically when you click anywhere on the map.
+              </span>
+              <span className="font-mono text-[10px] text-slate-500">
+                {coordinates.lat.toFixed(4)}, {coordinates.lng.toFixed(4)}
+              </span>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -247,7 +429,7 @@ export const ReportIssuePage: React.FC<ReportIssuePageProps> = ({
                   type="text"
                   value={ward}
                   onChange={(e) => setWard(e.target.value)}
-                  placeholder="e.g. Downtown Central"
+                  placeholder="e.g. Indiranagar, Koramangala, Whitefield"
                   className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
@@ -257,7 +439,7 @@ export const ReportIssuePage: React.FC<ReportIssuePageProps> = ({
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="e.g. Near 5th Cross intersection"
+                  placeholder="e.g. Near Metro Station / Sony World Signal"
                   className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>

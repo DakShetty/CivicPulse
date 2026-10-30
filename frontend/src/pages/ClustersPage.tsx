@@ -16,14 +16,17 @@ export const ClustersPage: React.FC = () => {
   const [clusters, setClusters] = useState<IssueCluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const fetchClusters = async () => {
     setLoading(true);
+    setReviewError(null);
     try {
       const data = await api.getClusters();
       setClusters(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setReviewError(err.message || 'Failed to fetch cluster suggestions.');
     } finally {
       setLoading(false);
     }
@@ -38,11 +41,12 @@ export const ClustersPage: React.FC = () => {
     action: 'confirmed' | 'separated' | 'dismissed'
   ) => {
     setReviewingId(memberId);
+    setReviewError(null);
     try {
       await api.reviewClusterMember(memberId, action, `Admin reviewed suggestion as ${action}`);
       await fetchClusters();
     } catch (err: any) {
-      alert(err.message || 'Review action failed');
+      setReviewError(err.message || 'Review action failed. Please ensure you are logged in as an Administrator.');
     } finally {
       setReviewingId(null);
     }
@@ -50,6 +54,12 @@ export const ClustersPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 space-y-6">
+      {reviewError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+          <span>{reviewError}</span>
+        </div>
+      )}
       {/* Header & Explainability Disclaimer */}
       <div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">

@@ -105,10 +105,24 @@ class Issue(Base):
     cluster = relationship("IssueCluster", foreign_keys=[cluster_id], back_populates="members")
 
     def to_dict(self, include_private: bool = False) -> dict:
+        category_data = None
+        try:
+            if self.category:
+                category_data = self.category.to_dict()
+        except Exception:
+            category_data = None
+
+        attachments_cnt = 0
+        try:
+            attachments_cnt = len(self.attachments) if self.attachments else 0
+        except Exception:
+            attachments_cnt = 0
+
         data = {
             "id": self.id,
             "public_reference": self.public_reference,
-            "category": self.category.to_dict() if self.category else None,
+            "category_id": self.category_id,
+            "category": category_data,
             "title": self.title,
             "description": self.description,
             "approximate_address": self.approximate_address,
@@ -128,25 +142,33 @@ class Issue(Base):
             "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
-            "attachments_count": len(self.attachments),
+            "attachments_count": attachments_cnt,
         }
         
-        if self.assignment and self.assignment.field_worker:
-            data["assigned_worker"] = {
-                "id": self.assignment.field_worker.id,
-                "display_name": self.assignment.field_worker.display_name,
-            }
-        else:
+        try:
+            if self.assignment and self.assignment.field_worker:
+                data["assigned_worker"] = {
+                    "id": self.assignment.field_worker.id,
+                    "display_name": self.assignment.field_worker.display_name,
+                }
+            else:
+                data["assigned_worker"] = None
+        except Exception:
             data["assigned_worker"] = None
 
         if include_private:
             data["rejection_reason"] = self.rejection_reason
-            if self.reporter:
-                data["reporter"] = {
-                    "id": self.reporter.id,
-                    "display_name": self.reporter.display_name,
-                    "email": self.reporter.email,
-                }
+            try:
+                if self.reporter:
+                    data["reporter"] = {
+                        "id": self.reporter.id,
+                        "display_name": self.reporter.display_name,
+                        "email": self.reporter.email,
+                    }
+                else:
+                    data["reporter"] = None
+            except Exception:
+                data["reporter"] = None
         return data
 
 

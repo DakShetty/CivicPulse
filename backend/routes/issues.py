@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 from backend.models import SessionLocal
 from backend.models.issue import (
     Issue,
@@ -292,17 +293,29 @@ def list_issues():
         page = max(1, int(request.args.get("page", 1)))
         limit = min(100, max(1, int(request.args.get("limit", 25))))
         total = query.count()
-        items = query.offset((page - 1) * limit).limit(limit).all()
+        items = (
+            query.options(
+                joinedload(Issue.category),
+                joinedload(Issue.reporter),
+                joinedload(Issue.assignment).joinedload(Assignment.field_worker),
+                joinedload(Issue.attachments),
+            )
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .all()
+        )
 
         current_user = get_current_user_from_request()
         is_staff = current_user and current_user.role in ("admin", "field_worker")
+
+        serialized_issues = [i.to_dict(include_private=is_staff) for i in items]
 
         return jsonify({
             "total": total,
             "page": page,
             "limit": limit,
             "pages": (total + limit - 1) // limit,
-            "issues": [i.to_dict(include_private=is_staff) for i in items],
+            "issues": serialized_issues,
         })
     finally:
         db.close()
@@ -313,26 +326,26 @@ def get_issue(issue_id: int):
     """Retrieves full details of a single issue."""
     db = SessionLocal()
     try:
-        issue = db.query(Issue).filter_by(id=issue_id).first()
+        issue = (
+            db.query(Issue)
+            .options(
+                joinedload(Issue.category),
+                joinedload(Issue.reporter),
+                joinedload(Issue.assignment).joinedload(Assignment.field_worker),
+                joinedload(Issue.attachments),
+                joinedload(Issue.status_history),
+            )
+            .filter_by(id=issue_id)
+            .first()
+        )
         if not issue:
             return jsonify({"error": "Issue not found"}), 404
 
         current_user = get_current_user_from_request()
         is_staff = current_user and current_user.role in ("admin", "field_worker")
-
         data = issue.to_dict(include_private=is_staff)
-        
-        # Attachments with secure pre-signed / download URLs
-        attachments = []
-        for att in issue.attachments:
-            att_dict = att.to_dict()
-            att_dict["download_url"] = storage_service.generate_download_url(att.s3_object_key)
-            attachments.append(att_dict)
-        data["attachments"] = attachments
-
-        # Status History
+        data["attachments"] = [a.to_dict() for a in issue.attachments]
         data["history"] = [h.to_dict() for h in issue.status_history]
-
         return jsonify(data)
     finally:
         db.close()

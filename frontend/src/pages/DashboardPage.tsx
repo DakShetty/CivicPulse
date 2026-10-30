@@ -38,6 +38,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [selectedStatusNote, setSelectedStatusNote] = useState<string>('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  useEffect(() => {
+    if (issues.length === 0) {
+      onRefresh();
+    }
+  }, []);
+
   // Filter issues
   const filteredIssues = issues.filter((i) => {
     if (categoryFilter && String(i.category?.id) !== categoryFilter) return false;

@@ -58,7 +58,9 @@ def evaluate_duplicate_candidate(
     lat2, lon2 = existing_issue_dict["latitude"], existing_issue_dict["longitude"]
 
     distance = haversine_distance_km(lat1, lon1, lat2, lon2)
-    same_category = new_issue_dict["category_id"] == existing_issue_dict["category_id"]
+    cat1 = new_issue_dict.get("category_id") or (new_issue_dict.get("category") or {}).get("id")
+    cat2 = existing_issue_dict.get("category_id") or (existing_issue_dict.get("category") or {}).get("id")
+    same_category = (cat1 is not None and cat1 == cat2)
 
     combined_text1 = f"{new_issue_dict.get('title', '')} {new_issue_dict.get('description', '')}"
     combined_text2 = f"{existing_issue_dict.get('title', '')} {existing_issue_dict.get('description', '')}"

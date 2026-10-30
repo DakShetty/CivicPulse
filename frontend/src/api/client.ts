@@ -48,13 +48,25 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  register: (display_name: string, email: string, password: string) =>
-    request<{ token: string; user: User }>('/auth/register', {
+  register: (display_name: string, email: string, password: string, role: string = 'reporter') =>
+    request<{ token?: string; user: User; pending_approval?: boolean; message?: string }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ display_name, email, password }),
+      body: JSON.stringify({ display_name, email, password, role }),
     }),
 
   getMe: () => request<{ user: User }>('/auth/me'),
+
+  getPendingWorkers: () => request<User[]>('/auth/workers/pending'),
+  getAllWorkers: () => request<User[]>('/auth/workers'),
+  approveWorker: (userId: number) =>
+    request<{ message: string; user: User }>(`/auth/workers/${userId}/approve`, { method: 'POST' }),
+  rejectWorker: (userId: number) =>
+    request<{ message: string }>(`/auth/workers/${userId}/reject`, { method: 'POST' }),
+  createAdminUser: (display_name: string, email: string, password: string) =>
+    request<{ message: string; user: User }>('/auth/create-admin', {
+      method: 'POST',
+      body: JSON.stringify({ display_name, email, password }),
+    }),
 
   // Categories
   getCategories: () => request<IssueCategory[]>('/issues/categories'),
@@ -81,7 +93,15 @@ export const api = {
       headers,
       body: formData,
     });
-    const data = await response.json();
+    
+    let data: any = {};
+    const text = await response.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text ? text.slice(0, 150) : `Server responded with status ${response.status}` };
+    }
+
     if (!response.ok) throw new Error(data.error || 'Failed to submit issue');
     return data as { message: string; public_reference: string; issue: Issue; duplicate_detected?: any };
   },
