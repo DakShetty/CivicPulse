@@ -17,17 +17,19 @@ class Config:
     DEBUG = os.environ.get("FLASK_DEBUG", "1") == "1"
 
     # Database
-    # Local default: SQLite in backend directory
+    # Local default: SQLite in backend directory (or /tmp if running in serverless like Vercel/Lambda)
     # RDS MySQL: mysql+pymysql://<user>:<password>@<rds-endpoint>:3306/civicpulse
+    _is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    _default_db_path = "/tmp/civicpulse.db" if _is_serverless else str(BASE_DIR / 'civicpulse.db')
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        f"sqlite:///{BASE_DIR / 'civicpulse.db'}"
+        f"sqlite:///{_default_db_path}"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Storage: 'local' or 's3'
     STORAGE_DRIVER = os.environ.get("STORAGE_DRIVER", "local")
-    LOCAL_STORAGE_DIR = BASE_DIR / "storage"
+    LOCAL_STORAGE_DIR = Path("/tmp/storage") if _is_serverless else (BASE_DIR / "storage")
     S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "civicpulse-demo-bucket")
     AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 

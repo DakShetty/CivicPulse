@@ -131,3 +131,4 @@ nginx -t
 systemctl restart nginx
 
 echo "=== CivicPulse EC2 Deployment Finished Successfully! ==="
+

@@ -11,13 +11,14 @@ if str(root_dir) not in sys.path:
 # Configure writable SQLite database location in /tmp when running in Vercel serverless environment
 if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
     tmp_db = Path("/tmp/civicpulse.db")
-    bundled_db = root_dir / "civicpulse.db"
-    if not tmp_db.exists() and bundled_db.exists():
-        try:
-            shutil.copy2(bundled_db, tmp_db)
-            print("Successfully copied bundled civicpulse.db to /tmp/civicpulse.db")
-        except Exception as e:
-            print(f"Notice: Failed to copy bundled db to /tmp: {e}")
+    for candidate in [root_dir / "backend" / "civicpulse.db", root_dir / "civicpulse.db"]:
+        if candidate.exists() and not tmp_db.exists():
+            try:
+                shutil.copy2(candidate, tmp_db)
+                print(f"Successfully copied {candidate} to /tmp/civicpulse.db")
+                break
+            except Exception as e:
+                print(f"Notice: Failed to copy bundled db to /tmp: {e}")
 
     if not os.environ.get("DATABASE_URL"):
         os.environ["DATABASE_URL"] = "sqlite:////tmp/civicpulse.db"
@@ -48,10 +49,22 @@ class PrefixMiddleware:
 
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "")
-        # If routed path arrived stripped of /api, prepend /api for Flask blueprints
+        # Strip internal function file prefixes if present
+        if path.startswith("/api/index.py"):
+            path = path[len("/api/index.py"):]
+        elif path.startswith("/index.py"):
+            path = path[len("/index.py"):]
+
+        # Normalize paths to match Flask blueprints prefixed with /api
         if not path.startswith("/api") and (path.startswith("/v1") or path == "/health"):
             environ["PATH_INFO"] = "/api" + path
+        elif path.startswith("/api"):
+            environ["PATH_INFO"] = path
+        elif path in ("", "/"):
+            environ["PATH_INFO"] = "/api/v1/health"
+
         return self.wsgi_app(environ, start_response)
 
 
 app = PrefixMiddleware(flask_app)
+handler = app

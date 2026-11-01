@@ -15,10 +15,13 @@ class StorageService:
         self.region = region or Config.AWS_REGION
         self.local_dir = Path(Config.LOCAL_STORAGE_DIR)
         
-        # Ensure local directory exists
-        self.local_dir.mkdir(parents=True, exist_ok=True)
-        (self.local_dir / "attachments").mkdir(exist_ok=True)
-        (self.local_dir / "reports").mkdir(exist_ok=True)
+        # Ensure local directory exists safely (prevent failure in read-only serverless filesystems)
+        try:
+            self.local_dir.mkdir(parents=True, exist_ok=True)
+            (self.local_dir / "attachments").mkdir(exist_ok=True)
+            (self.local_dir / "reports").mkdir(exist_ok=True)
+        except OSError:
+            pass
 
         self._s3_client = None
 
